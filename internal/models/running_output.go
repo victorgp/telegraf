@@ -26,7 +26,7 @@ type RunningOutput struct {
 
 	metrics    []telegraf.Metric
 	tmpmetrics map[int][]telegraf.Metric
-	overwriteI int
+	writeI     int
 	mapI       int
 
 	sync.Mutex
@@ -36,15 +36,21 @@ func NewRunningOutput(
 	name string,
 	output telegraf.Output,
 	conf *OutputConfig,
+	metricBufferLimit int,
 ) *RunningOutput {
 	ro := &RunningOutput{
-		Name:              name,
-		metrics:           make([]telegraf.Metric, 0),
-		tmpmetrics:        make(map[int][]telegraf.Metric),
-		Output:            output,
-		Config:            conf,
-		MetricBufferLimit: DEFAULT_METRIC_BUFFER_LIMIT,
+		Name:       name,
+		tmpmetrics: make(map[int][]telegraf.Metric),
+		Output:     output,
+		Config:     conf,
 	}
+
+	if metricBufferLimit == 0 {
+		metricBufferLimit = DEFAULT_METRIC_BUFFER_LIMIT
+	}
+
+	ro.MetricBufferLimit = metricBufferLimit
+	ro.metrics = make([]telegraf.Metric, metricBufferLimit, metricBufferLimit)
 	return ro
 }
 
@@ -59,14 +65,16 @@ func (ro *RunningOutput) AddMetric(metric telegraf.Metric) {
 	ro.Lock()
 	defer ro.Unlock()
 
-	if len(ro.metrics) < ro.MetricBufferLimit {
-		ro.metrics = append(ro.metrics, metric)
+	ro.metrics[ro.writeI] = metric
+	ro.writeI++
+
+	if ro.writeI < ro.MetricBufferLimit {
+		return
 	} else {
 		if ro.FlushBufferWhenFull {
 			ro.metrics = append(ro.metrics, metric)
 			tmpmetrics := make([]telegraf.Metric, len(ro.metrics))
 			copy(tmpmetrics, ro.metrics)
-			ro.metrics = make([]telegraf.Metric, 0)
 			err := ro.write(tmpmetrics)
 			if err != nil {
 				log.Printf("ERROR writing full metric buffer to output %s, %s",
@@ -82,16 +90,15 @@ func (ro *RunningOutput) AddMetric(metric telegraf.Metric) {
 				}
 			}
 		} else {
-			if ro.overwriteI == 0 {
+			if ro.writeI == len(ro.metrics) {
+				ro.writeI = 0
+			}
+			if ro.writeI == 0 {
 				log.Printf("WARNING: overwriting cached metrics, you may want to " +
 					"increase the metric_buffer_limit setting in your [agent] " +
 					"config if you do not wish to overwrite metrics.\n")
 			}
-			if ro.overwriteI == len(ro.metrics) {
-				ro.overwriteI = 0
-			}
-			ro.metrics[ro.overwriteI] = metric
-			ro.overwriteI++
+			ro.metrics[ro.writeI] = metric
 		}
 	}
 }
@@ -105,7 +112,7 @@ func (ro *RunningOutput) Write() error {
 		return err
 	} else {
 		ro.metrics = make([]telegraf.Metric, 0)
-		ro.overwriteI = 0
+		ro.writeI = 0
 	}
 
 	// Write any cached metric buffers that failed previously

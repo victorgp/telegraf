@@ -424,10 +424,8 @@ func (c *Config) addOutput(name string, table *ast.Table) error {
 		return err
 	}
 
-	ro := internal_models.NewRunningOutput(name, output, outputConfig)
-	if c.Agent.MetricBufferLimit > 0 {
-		ro.MetricBufferLimit = c.Agent.MetricBufferLimit
-	}
+	ro := internal_models.NewRunningOutput(name, output, outputConfig,
+		c.Agent.MetricBufferLimit)
 	ro.FlushBufferWhenFull = c.Agent.FlushBufferWhenFull
 	c.Outputs = append(c.Outputs, ro)
 	return nil
