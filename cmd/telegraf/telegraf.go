@@ -6,8 +6,12 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"strings"
 	"syscall"
+
+	"net/http"
+	_ "net/http/pprof"
 
 	"github.com/influxdata/telegraf/agent"
 	"github.com/influxdata/telegraf/internal/config"
@@ -19,6 +23,8 @@ import (
 
 var fDebug = flag.Bool("debug", false,
 	"show metrics as they're generated to stdout")
+var fPprof = flag.Bool("pprof", false,
+	"Startup profiling server at http://localhost:6060/debug/pprof")
 var fQuiet = flag.Bool("quiet", false,
 	"run in quiet mode")
 var fTest = flag.Bool("test", false, "gather metrics, print them out, and exit")
@@ -206,6 +212,17 @@ func main() {
 		}
 		if len(c.Inputs) == 0 {
 			log.Fatalf("Error: no inputs found, did you provide a valid config file?")
+		}
+
+		// Free up memory by nulling unused loaded plugins
+		inputs.Inputs = nil
+		outputs.Outputs = nil
+		debug.FreeOSMemory()
+
+		if *fPprof {
+			go func() {
+				log.Println(http.ListenAndServe("localhost:6060", nil))
+			}()
 		}
 
 		ag, err := agent.NewAgent(c)

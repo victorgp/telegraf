@@ -2,6 +2,7 @@ package internal_models
 
 import (
 	"log"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -83,9 +84,9 @@ func (ro *RunningOutput) AddMetric(metric telegraf.Metric) {
 			}
 		} else {
 			if ro.overwriteI == 0 {
-				log.Printf("WARNING: overwriting cached metrics, you may want to " +
-					"increase the metric_buffer_limit setting in your [agent] " +
-					"config if you do not wish to overwrite metrics.\n")
+				log.Printf("WARNING: overwriting cached metrics, you may " +
+					"want to increase the metric_buffer_limit setting in your " +
+					"[agent] config if you do not wish to overwrite metrics.\n")
 			}
 			if ro.overwriteI == len(ro.metrics) {
 				ro.overwriteI = 0
@@ -109,12 +110,20 @@ func (ro *RunningOutput) Write() error {
 	}
 
 	// Write any cached metric buffers that failed previously
-	for i, tmpmetrics := range ro.tmpmetrics {
-		if err := ro.write(tmpmetrics); err != nil {
-			return err
-		} else {
-			delete(ro.tmpmetrics, i)
+	if len(ro.tmpmetrics) > 0 {
+		for i, tmpmetrics := range ro.tmpmetrics {
+			if err := ro.write(tmpmetrics); err != nil {
+				return err
+			} else {
+				delete(ro.tmpmetrics, i)
+			}
 		}
+
+		// If we have built up some metric buffer caches, we should free the
+		// memory that was allocated for them back to the OS now that we've
+		// flushed them. Otherwise the mem usage of telegraf has potential to
+		// continue growing.
+		debug.FreeOSMemory()
 	}
 
 	return nil
