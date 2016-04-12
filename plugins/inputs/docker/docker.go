@@ -200,9 +200,8 @@ func (d *Docker) gatherContainer(
 	}
 
 	tags := map[string]string{
-		"cont_id":    container.ID,
-		"cont_name":  cname,
-		"cont_image": container.Image,
+		"container_name":  cname,
+		"container_image": container.Image,
 	}
 	if len(d.ContainerNames) > 0 {
 		if !sliceContains(cname, d.ContainerNames) {
@@ -225,7 +224,7 @@ func (d *Docker) gatherContainer(
 		tags[k] = v
 	}
 
-	gatherContainerStats(v, acc, tags)
+	gatherContainerStats(v, acc, tags, container.ID)
 
 	return nil
 }
@@ -234,6 +233,7 @@ func gatherContainerStats(
 	stat *types.StatsJSON,
 	acc telegraf.Accumulator,
 	tags map[string]string,
+	id string,
 ) {
 	now := stat.Read
 
@@ -272,8 +272,9 @@ func gatherContainerStats(
 		"inactive_file":             stat.MemoryStats.Stats["inactive_file"],
 		"total_pgpgin":              stat.MemoryStats.Stats["total_pgpgin"],
 		"usage_percent":             calculateMemPercent(stat),
+		"container_id":              id,
 	}
-	acc.AddFields("docker_mem", memfields, tags, now)
+	acc.AddFields("docker_container_mem", memfields, tags, now)
 
 	cpufields := map[string]interface{}{
 		"usage_total":                  stat.CPUStats.CPUUsage.TotalUsage,
@@ -284,32 +285,34 @@ func gatherContainerStats(
 		"throttling_throttled_periods": stat.CPUStats.ThrottlingData.ThrottledPeriods,
 		"throttling_throttled_time":    stat.CPUStats.ThrottlingData.ThrottledTime,
 		"usage_percent":                calculateCPUPercent(stat),
+		"container_id":                 id,
 	}
 	cputags := copyTags(tags)
 	cputags["cpu"] = "cpu-total"
-	acc.AddFields("docker_cpu", cpufields, cputags, now)
+	acc.AddFields("docker_container_cpu", cpufields, cputags, now)
 
 	for i, percpu := range stat.CPUStats.CPUUsage.PercpuUsage {
 		percputags := copyTags(tags)
 		percputags["cpu"] = fmt.Sprintf("cpu%d", i)
-		acc.AddFields("docker_cpu", map[string]interface{}{"usage_total": percpu}, percputags, now)
+		acc.AddFields("docker_container_cpu", map[string]interface{}{"usage_total": percpu}, percputags, now)
 	}
 
 	for network, netstats := range stat.Networks {
 		netfields := map[string]interface{}{
-			"rx_dropped": netstats.RxDropped,
-			"rx_bytes":   netstats.RxBytes,
-			"rx_errors":  netstats.RxErrors,
-			"tx_packets": netstats.TxPackets,
-			"tx_dropped": netstats.TxDropped,
-			"rx_packets": netstats.RxPackets,
-			"tx_errors":  netstats.TxErrors,
-			"tx_bytes":   netstats.TxBytes,
+			"rx_dropped":   netstats.RxDropped,
+			"rx_bytes":     netstats.RxBytes,
+			"rx_errors":    netstats.RxErrors,
+			"tx_packets":   netstats.TxPackets,
+			"tx_dropped":   netstats.TxDropped,
+			"rx_packets":   netstats.RxPackets,
+			"tx_errors":    netstats.TxErrors,
+			"tx_bytes":     netstats.TxBytes,
+			"container_id": id,
 		}
 		// Create a new network tag dictionary for the "network" tag
 		nettags := copyTags(tags)
 		nettags["network"] = network
-		acc.AddFields("docker_net", netfields, nettags, now)
+		acc.AddFields("docker_container_net", netfields, nettags, now)
 	}
 
 	gatherBlockIOMetrics(stat, acc, tags, now)
