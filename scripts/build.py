@@ -112,12 +112,12 @@ prereq_cmds = {
 
 def print_banner():
     logging.info("""
- _____     _                       __ 
+ _____     _                       __
 /__   \\___| | ___  __ _ _ __ __ _ / _|
-  / /\\/ _ \\ |/ _ \\/ _` | '__/ _` | |_ 
+  / /\\/ _ \\ |/ _ \\/ _` | '__/ _` | |_
  / / |  __/ |  __/ (_| | | | (_| |  _|
- \\/   \\___|_|\\___|\\__, |_|  \\__,_|_|  
-                  |___/               
+ \\/   \\___|_|\\___|\\__, |_|  \\__,_|_|
+                  |___/
  Build Script
 """)
 
@@ -886,7 +886,7 @@ if __name__ == '__main__':
                         help='Package binary output')
     parser.add_argument('--release',
                         action='store_true',
-                        help='Mark build output as release')    
+                        help='Mark build output as release')
     parser.add_argument('--clean',
                         action='store_true',
                         help='Clean output directory before building')
