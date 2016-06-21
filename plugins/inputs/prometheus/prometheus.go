@@ -2,6 +2,7 @@ package prometheus
 
 import (
 	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"github.com/influxdata/telegraf"
@@ -20,6 +21,13 @@ type Prometheus struct {
 	InsecureSkipVerify bool
 	// Bearer Token authorization file path
 	BearerToken string `toml:"bearer_token"`
+
+	// CA certificate file path
+	TlsCA string `toml:"tls_ca"`
+
+	// Cert and key pair file paths
+	TlsCert string `toml:"tls_cert"`
+	TlsKey  string `toml:"tls_key"`
 }
 
 var sampleConfig = `
@@ -30,6 +38,10 @@ var sampleConfig = `
   # insecure_skip_verify = false
   ## Use bearer token for authorization
   # bearer_token = /path/to/bearer/token
+  ## Use x509 cert authentication
+  # tls_ca = /path/to/cafile
+  # tls_cert = /path/to/certfile
+  # tls_key = /path/to/keyfile
 `
 
 func (p *Prometheus) SampleConfig() string {
@@ -78,6 +90,24 @@ func (p *Prometheus) gatherURL(url string, acc telegraf.Accumulator) error {
 	var token []byte
 	var resp *http.Response
 
+	caCertPool := x509.NewCertPool()
+	if p.TlsCA != "" {
+		caCert, err := ioutil.ReadFile(p.TlsCA)
+		if err != nil {
+			return err
+		}
+		caCertPool.AppendCertsFromPEM(caCert)
+	}
+
+	certificates := []tls.Certificate{}
+	if p.TlsCert != "" && p.TlsKey != "" {
+		cert, err := tls.LoadX509KeyPair(p.TlsCert, p.TlsKey)
+		if err != nil {
+			return err
+		}
+		certificates = []tls.Certificate{cert}
+	}
+
 	var rt http.RoundTripper = &http.Transport{
 		Dial: (&net.Dialer{
 			Timeout:   5 * time.Second,
@@ -86,6 +116,8 @@ func (p *Prometheus) gatherURL(url string, acc telegraf.Accumulator) error {
 		TLSHandshakeTimeout: 5 * time.Second,
 		TLSClientConfig: &tls.Config{
 			InsecureSkipVerify: p.InsecureSkipVerify,
+			RootCAs:            caCertPool,
+			Certificates:       certificates,
 		},
 		ResponseHeaderTimeout: time.Duration(3 * time.Second),
 	}
